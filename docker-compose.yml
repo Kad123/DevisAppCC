@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    # Nous utilisons 'environment' pour forcer l'initialisation de la DB (corrige l'erreur POSTGRES_PASSWORD)
+    environment:
+      POSTGRES_USER: btp_user
+      POSTGRES_PASSWORD: btp_password_secure
+      POSTGRES_DB: btp_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+
+  web:
+    build: . 
+    # Nous utilisons 'environment' ici aussi, car le service web n'arrivait pas à lire DATABASE_URL
+    environment:
+      # L'URL de connexion complète est passée à l'API Python
+      DATABASE_URL: postgresql://btp_user:btp_password_secure@db:5432/btp_db
+      
+      # Variables de sécurité (vous avez fourni la clé IEAFDTPEAL2021)
+      SECRET_KEY: IEAFDTPEAL2021
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/code 
+    depends_on:
+      - db 
+
+volumes:
+  postgres_data:
