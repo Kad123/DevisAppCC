@@ -1,23 +1,28 @@
 import React, { memo, useState, useEffect } from 'react';
-import { Trash2, Plus, Save, Edit3, Check } from 'lucide-react';
+import { Trash2, Plus, Save, Edit3, Check, Send, XCircle, FileText, ArrowRight, Loader2 } from 'lucide-react';
+import { devisAPI } from './api/devisAPI';
 
-const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSaved }) => {
+const WORKFLOW_STATUTS = [
+  { id: 'Brouillon', label: 'Brouillon', color: 'slate', icon: FileText, next: 'Envoyé' },
+  { id: 'Envoyé', label: 'Envoyé', color: 'blue', icon: Send, next: 'Validé', canRefuse: true },
+  { id: 'Validé', label: 'Validé', color: 'green', icon: Check, next: null },
+  { id: 'Refusé', label: 'Refusé', color: 'red', icon: XCircle, next: null },
+];
+
+const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSaved, token, onStatusChange }) => {
   const [devis, setDevis] = useState(generatedDevis);
-  const [devisSaved, setDevisSaved] = useState(generatedDevis); // Sauvegarde du dernier état accepté
-  // Mode édition: true si devis vient d'être généré (pas d'ID), false si c'est un devis existant
+  const [devisSaved, setDevisSaved] = useState(generatedDevis);
   const [isEditing, setIsEditing] = useState(!generatedDevis?.id || generatedDevis?.id < 0);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   useEffect(() => {
-    console.log('🔄 DevisEditableView reçoit devis:', generatedDevis);
     if (generatedDevis) {
       setDevis(generatedDevis);
-      setDevisSaved(generatedDevis); // Sauvegarder la copie initiale
-      // Pour les devis existants (avec ID positif), commencer en mode lecture
+      setDevisSaved(generatedDevis);
       setIsEditing(!generatedDevis.id || generatedDevis.id < 0);
     }
   }, [generatedDevis]);
 
-  // Recalculer les totaux quand le devis change
   const recalculateTotals = (devisToUpdate) => {
     let totalHt = 0;
     const lotsUpdated = devisToUpdate.lots.map(lot => {
@@ -60,7 +65,6 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
   const handleDeleteLot = (lotIdx) => {
     const newDevis = { ...devis };
     newDevis.lots.splice(lotIdx, 1);
-    // Renuméroter les lots
     newDevis.lots = newDevis.lots.map((lot, idx) => ({ ...lot, ordre: idx + 1 }));
     setDevis(recalculateTotals(newDevis));
   };
@@ -71,14 +75,7 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
     newDevis.lots.push({
       nom: 'Nouveau Lot',
       ordre: newOrder,
-      lignes_poste: [
-        {
-          designation: 'Nouvelle prestation',
-          unite: 'unité',
-          quantite: 1,
-          prix_unitaire_ht: 0
-        }
-      ]
+      lignes_poste: [{ designation: 'Nouvelle prestation', unite: 'unité', quantite: 1, prix_unitaire_ht: 0 }]
     });
     setDevis(recalculateTotals(newDevis));
   };
@@ -95,43 +92,72 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
 
   const handleSaveDevis = () => {
     setGeneratedDevis(devis);
-    console.log('✓ Devis sauvegardé définitivement', devis);
-    // Appeler le callback pour sauvegarder et revenir au dashboard
-    if (onDevisSaved) {
-      onDevisSaved(devis);
-    }
+    if (onDevisSaved) onDevisSaved(devis);
   };
 
   const handleExitEditMode = () => {
-    // Quitter le mode édition, on garde le devis en mémoire
-    setDevisSaved(devis); // Sauvegarder les modifications actuelles
+    setDevisSaved(devis);
     setIsEditing(false);
   };
 
   const handleReenterEditMode = () => {
-    // Revenir en mode édition (devis conserve les dernières modifications acceptées)
     setDevis(devisSaved);
     setIsEditing(true);
   };
 
   const handleCancelEdits = () => {
-    // Annuler les modifications et revenir à la dernière version sauvegardée
     setDevis(devisSaved);
     setIsEditing(false);
+  };
+
+  // === WORKFLOW FUNCTIONS ===
+  const getCurrentStatut = () => WORKFLOW_STATUTS.find(s => s.id === devis.statut) || WORKFLOW_STATUTS[0];
+
+  const handleChangeStatut = async (newStatut) => {
+    if (!devis.id || !token) return;
+
+    setUpdatingStatus(true);
+    try {
+      await devisAPI.updateDevisStatut(devis.id, newStatut, token);
+      const updatedDevis = { ...devis, statut: newStatut };
+      setDevis(updatedDevis);
+      setDevisSaved(updatedDevis);
+      setGeneratedDevis(updatedDevis);
+      // Notifier le parent pour rafraîchir les vues (ObjectifsCommerciauxView, etc.)
+      onStatusChange?.();
+    } catch (err) {
+      console.error('Erreur changement statut:', err);
+      alert('Erreur lors du changement de statut');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const getStatutColor = (color) => {
+    const colors = {
+      slate: { bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-300' },
+      blue: { bg: 'bg-blue-100', text: 'text-blue-600', border: 'border-blue-300' },
+      green: { bg: 'bg-green-100', text: 'text-green-600', border: 'border-green-300' },
+      red: { bg: 'bg-red-100', text: 'text-red-600', border: 'border-red-300' },
+    };
+    return colors[color] || colors.slate;
   };
 
   if (!devis) {
     return <div className="p-12 text-center text-slate-500 text-lg">Aucun devis à afficher</div>;
   }
-  
+
   if (!devis.lots || devis.lots.length === 0) {
     return (
       <div className="p-12 text-center bg-white rounded-3xl border border-slate-200">
         <p className="text-slate-500 text-lg mb-4">Devis sans lots</p>
-        <p className="text-slate-400 text-sm">{JSON.stringify(devis, null, 2).substring(0, 200)}</p>
       </div>
     );
   }
+
+  const currentStatut = getCurrentStatut();
+  const statutColors = getStatutColor(currentStatut.color);
+  const StatutIcon = currentStatut.icon;
 
   // === VUE LECTURE SEULE ===
   if (!isEditing) {
@@ -140,7 +166,11 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
         {/* En-tête lecture */}
         <div className="bg-slate-900 p-12 text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-8 relative">
           <div className="relative z-10">
-            <span className="text-[10px] font-black uppercase bg-blue-600 px-3 py-1 rounded-full mb-4 inline-block tracking-[0.2em]">Devis Généré</span>
+            {/* Badge statut */}
+            <div className={`inline-flex items-center gap-2 ${statutColors.bg} ${statutColors.text} px-4 py-2 rounded-full mb-4`}>
+              <StatutIcon className="w-4 h-4" />
+              <span className="text-xs font-black uppercase tracking-wider">{currentStatut.label}</span>
+            </div>
             <h3 className="text-4xl font-black uppercase tracking-tight italic">{devis.nom}</h3>
           </div>
           <div className="text-left md:text-right bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10 min-w-[250px] relative z-10">
@@ -150,6 +180,73 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
             <p className="text-2xl font-black text-white">{(devis.total_ht * (1 + devis.taux_tva / 100))?.toLocaleString()} €</p>
           </div>
         </div>
+
+        {/* Workflow Actions */}
+        {devis.id > 0 && (
+          <div className="bg-gradient-to-r from-slate-50 to-slate-100 p-6 border-b border-slate-200">
+            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Workflow Statut</p>
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Afficher le workflow complet */}
+              {WORKFLOW_STATUTS.filter(s => s.id !== 'Refusé').map((s, i) => {
+                const sColors = getStatutColor(s.color);
+                const Icon = s.icon;
+                const isActive = s.id === devis.statut;
+                const isPast = WORKFLOW_STATUTS.findIndex(ws => ws.id === devis.statut) > i;
+
+                return (
+                  <React.Fragment key={s.id}>
+                    <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 transition-all ${
+                      isActive
+                        ? `${sColors.bg} ${sColors.border} ${sColors.text} ring-2 ring-offset-2 ring-${s.color}-400`
+                        : isPast
+                          ? 'bg-green-50 border-green-200 text-green-600'
+                          : 'bg-white border-slate-200 text-slate-400'
+                    }`}>
+                      <Icon className="w-4 h-4" />
+                      <span className="text-xs font-black uppercase">{s.label}</span>
+                      {isPast && <Check className="w-4 h-4 text-green-600" />}
+                    </div>
+                    {i < WORKFLOW_STATUTS.filter(ws => ws.id !== 'Refusé').length - 1 && (
+                      <ArrowRight className="w-5 h-5 text-slate-300" />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+
+            {/* Boutons d'action */}
+            {(currentStatut.next || currentStatut.canRefuse) && (
+              <div className="flex gap-3 mt-6">
+                {currentStatut.next && (
+                  <button
+                    onClick={() => handleChangeStatut(currentStatut.next)}
+                    disabled={updatingStatus}
+                    className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50"
+                  >
+                    {updatingStatus ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <ArrowRight className="w-4 h-4" />
+                        Passer en "{WORKFLOW_STATUTS.find(s => s.id === currentStatut.next)?.label}"
+                      </>
+                    )}
+                  </button>
+                )}
+                {currentStatut.canRefuse && (
+                  <button
+                    onClick={() => handleChangeStatut('Refusé')}
+                    disabled={updatingStatus}
+                    className="flex items-center gap-2 bg-red-100 text-red-600 px-6 py-3 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-red-200 active:scale-95 transition-all border-2 border-red-200 disabled:opacity-50"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Marquer comme Refusé
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Lots en lecture seule */}
         <div className="p-12 space-y-16">
@@ -208,7 +305,7 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
               onClick={() => setGeneratedDevis(null)}
               className="px-8 py-4 rounded-2xl border-2 border-slate-200 font-black text-slate-500 uppercase text-xs tracking-widest hover:bg-white transition-all"
             >
-              Recommencer
+              Fermer
             </button>
             <button
               onClick={handleReenterEditMode}
@@ -216,12 +313,14 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
             >
               <Edit3 className="w-5 h-5" /> Modifier
             </button>
-            <button
-              onClick={handleSaveDevis}
-              className="bg-green-600 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.15em] flex items-center gap-3 shadow-2xl shadow-green-600/20 hover:bg-green-700 active:scale-95 transition-all"
-            >
-              <Check className="w-5 h-5" /> Valider
-            </button>
+            {!devis.id && (
+              <button
+                onClick={handleSaveDevis}
+                className="bg-green-600 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.15em] flex items-center gap-3 shadow-2xl shadow-green-600/20 hover:bg-green-700 active:scale-95 transition-all"
+              >
+                <Check className="w-5 h-5" /> Enregistrer
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -231,7 +330,6 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
   // === VUE ÉDITION ===
   return (
     <div className="bg-white rounded-[3rem] shadow-2xl border border-slate-200 overflow-hidden">
-      {/* En-tête */}
       <div className="bg-slate-900 p-12 text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-8 relative">
         <div className="relative z-10 flex-1">
           <span className="text-[10px] font-black uppercase bg-blue-600 px-3 py-1 rounded-full mb-4 inline-block tracking-[0.2em]">Mode Édition</span>
@@ -249,17 +347,13 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
         </div>
       </div>
 
-      {/* Lots éditables */}
       <div className="p-12 space-y-16">
         {devis.lots.map((lot, lotIdx) => (
           <div key={lotIdx} className="space-y-6 bg-slate-50/50 p-8 rounded-3xl border border-slate-200">
-            {/* Nom du lot éditable */}
             <div className="flex justify-between items-center gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-4 mb-4">
-                  <span className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-xs font-black shadow-xl">
-                    {lot.ordre}
-                  </span>
+                  <span className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-xs font-black shadow-xl">{lot.ordre}</span>
                   <input
                     type="text"
                     value={lot.nom}
@@ -270,21 +364,15 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <span className="text-sm font-black text-slate-600 bg-white px-4 py-2 rounded-xl border border-slate-200">
-                  {lot.total_lot_ht?.toLocaleString()} € HT
-                </span>
+                <span className="text-sm font-black text-slate-600 bg-white px-4 py-2 rounded-xl border border-slate-200">{lot.total_lot_ht?.toLocaleString()} € HT</span>
                 {devis.lots.length > 1 && (
-                  <button
-                    onClick={() => handleDeleteLot(lotIdx)}
-                    className="p-2 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition-all"
-                  >
+                  <button onClick={() => handleDeleteLot(lotIdx)} className="p-2 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition-all">
                     <Trash2 className="w-5 h-5" />
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Tableau éditable des lignes de poste */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -303,51 +391,20 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
                     return (
                       <tr key={ligneIdx} className="hover:bg-white transition-all">
                         <td className="py-4 px-4">
-                          <input
-                            type="text"
-                            value={ligne.designation}
-                            onChange={(e) => handleLigneChange(lotIdx, ligneIdx, 'designation', e.target.value)}
-                            className="w-full px-2 py-1 bg-white border-2 border-slate-200 rounded-lg focus:border-blue-600 outline-none font-bold text-slate-700"
-                            placeholder="Désignation"
-                          />
+                          <input type="text" value={ligne.designation} onChange={(e) => handleLigneChange(lotIdx, ligneIdx, 'designation', e.target.value)} className="w-full px-2 py-1 bg-white border-2 border-slate-200 rounded-lg focus:border-blue-600 outline-none font-bold text-slate-700" />
                         </td>
                         <td className="py-4 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={ligne.quantite}
-                            onChange={(e) => handleLigneChange(lotIdx, ligneIdx, 'quantite', e.target.value)}
-                            className="w-full px-2 py-1 bg-white border-2 border-slate-200 rounded-lg focus:border-blue-600 outline-none text-slate-700 font-bold text-center"
-                          />
+                          <input type="number" min="0" step="0.01" value={ligne.quantite} onChange={(e) => handleLigneChange(lotIdx, ligneIdx, 'quantite', e.target.value)} className="w-full px-2 py-1 bg-white border-2 border-slate-200 rounded-lg focus:border-blue-600 outline-none text-slate-700 font-bold text-center" />
                         </td>
                         <td className="py-4 text-center">
-                          <input
-                            type="text"
-                            value={ligne.unite}
-                            onChange={(e) => handleLigneChange(lotIdx, ligneIdx, 'unite', e.target.value)}
-                            className="w-full px-2 py-1 bg-white border-2 border-slate-200 rounded-lg focus:border-blue-600 outline-none text-slate-700 font-bold text-center"
-                            placeholder="unité"
-                          />
+                          <input type="text" value={ligne.unite} onChange={(e) => handleLigneChange(lotIdx, ligneIdx, 'unite', e.target.value)} className="w-full px-2 py-1 bg-white border-2 border-slate-200 rounded-lg focus:border-blue-600 outline-none text-slate-700 font-bold text-center" />
                         </td>
                         <td className="py-4 text-right">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={ligne.prix_unitaire_ht}
-                            onChange={(e) => handleLigneChange(lotIdx, ligneIdx, 'prix_unitaire_ht', e.target.value)}
-                            className="w-full px-2 py-1 bg-white border-2 border-slate-200 rounded-lg focus:border-blue-600 outline-none text-right font-black text-slate-900"
-                          />
+                          <input type="number" min="0" step="0.01" value={ligne.prix_unitaire_ht} onChange={(e) => handleLigneChange(lotIdx, ligneIdx, 'prix_unitaire_ht', e.target.value)} className="w-full px-2 py-1 bg-white border-2 border-slate-200 rounded-lg focus:border-blue-600 outline-none text-right font-black text-slate-900" />
                         </td>
-                        <td className="py-4 text-right pr-4 font-black text-slate-900">
-                          {total.toLocaleString()} €
-                        </td>
+                        <td className="py-4 text-right pr-4 font-black text-slate-900">{total.toLocaleString()} €</td>
                         <td className="py-4 text-center">
-                          <button
-                            onClick={() => handleDeleteLigne(lotIdx, ligneIdx)}
-                            className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-all"
-                          >
+                          <button onClick={() => handleDeleteLigne(lotIdx, ligneIdx)} className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-all">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </td>
@@ -358,55 +415,29 @@ const DevisEditableView = memo(({ generatedDevis, setGeneratedDevis, onDevisSave
               </table>
             </div>
 
-            {/* Bouton ajouter ligne */}
-            <button
-              onClick={() => handleAddLigne(lotIdx)}
-              className="w-full mt-4 py-3 px-4 border-2 border-dashed border-slate-400 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
-            >
+            <button onClick={() => handleAddLigne(lotIdx)} className="w-full mt-4 py-3 px-4 border-2 border-dashed border-slate-400 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-all flex items-center justify-center gap-2">
               <Plus className="w-5 h-5" /> Ajouter une prestation
             </button>
           </div>
         ))}
       </div>
 
-      {/* Bouton ajouter lot et configuration TVA */}
       <div className="bg-slate-100 p-12 border-t border-slate-200 space-y-8">
-        <button
-          onClick={handleAddLot}
-          className="w-full py-3 px-4 border-2 border-dashed border-slate-400 text-slate-600 font-black uppercase text-sm rounded-xl hover:bg-white transition-all flex items-center justify-center gap-2"
-        >
+        <button onClick={handleAddLot} className="w-full py-3 px-4 border-2 border-dashed border-slate-400 text-slate-600 font-black uppercase text-sm rounded-xl hover:bg-white transition-all flex items-center justify-center gap-2">
           <Plus className="w-5 h-5" /> Ajouter un lot
         </button>
 
-        {/* Configuration TVA */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-6 rounded-2xl border border-slate-200">
           <div className="flex flex-col">
-            <label htmlFor="tva" className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">
-              Taux TVA (%)
-            </label>
-            <input
-              id="tva"
-              type="number"
-              min="0"
-              max="100"
-              step="0.1"
-              value={devis.taux_tva}
-              onChange={(e) => handleTvaChange(e.target.value)}
-              className="px-4 py-2 border-2 border-slate-200 rounded-lg focus:border-blue-600 outline-none font-bold text-slate-800 w-24"
-            />
+            <label htmlFor="tva" className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Taux TVA (%)</label>
+            <input id="tva" type="number" min="0" max="100" step="0.1" value={devis.taux_tva} onChange={(e) => handleTvaChange(e.target.value)} className="px-4 py-2 border-2 border-slate-200 rounded-lg focus:border-blue-600 outline-none font-bold text-slate-800 w-24" />
           </div>
           <div className="flex gap-4">
-            <button
-              onClick={handleCancelEdits}
-              className="px-8 py-4 rounded-2xl border-2 border-slate-200 font-black text-slate-500 uppercase text-xs tracking-widest hover:bg-slate-50 transition-all"
-            >
-              Annuler les modifications
+            <button onClick={handleCancelEdits} className="px-8 py-4 rounded-2xl border-2 border-slate-200 font-black text-slate-500 uppercase text-xs tracking-widest hover:bg-slate-50 transition-all">
+              Annuler
             </button>
-            <button
-              onClick={handleExitEditMode}
-              className="bg-slate-600 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.15em] flex items-center gap-3 shadow-2xl shadow-slate-600/20 hover:bg-slate-700 active:scale-95 transition-all"
-            >
-              <Check className="w-5 h-5" /> Terminer l'édition
+            <button onClick={handleExitEditMode} className="bg-slate-600 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.15em] flex items-center gap-3 shadow-2xl shadow-slate-600/20 hover:bg-slate-700 active:scale-95 transition-all">
+              <Check className="w-5 h-5" /> Terminer
             </button>
           </div>
         </div>

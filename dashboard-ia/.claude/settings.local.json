@@ -4,7 +4,11 @@
       "Bash(xargs:*)",
       "Bash(docker-compose up:*)",
       "Bash(open -a Docker:*)",
-      "Bash(docker info:*)"
+      "Bash(docker info:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)"
     ]
   }
 }

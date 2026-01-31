@@ -21,6 +21,8 @@ const DevisIAView = memo(({
   setGeneratedDevis,
   handleGenerateIA: handleGenerateIAFromParent,
   onDevisSaved,
+  token,
+  onStatusChange,
 }) => {
   // State LOCAL du textarea - complètement isolé du parent
   const [localPrompt, setLocalPrompt] = useState('');
@@ -56,10 +58,12 @@ const DevisIAView = memo(({
       </div>
 
       {generatedDevis && (
-        <DevisEditableView 
-          generatedDevis={generatedDevis} 
+        <DevisEditableView
+          generatedDevis={generatedDevis}
           setGeneratedDevis={setGeneratedDevis}
           onDevisSaved={onDevisSaved}
+          token={token}
+          onStatusChange={onStatusChange}
         />
       )}
     </div>

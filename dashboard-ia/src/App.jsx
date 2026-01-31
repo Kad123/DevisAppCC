@@ -5,7 +5,7 @@ import {
   Receipt, Map, Plus, Search, MoreVertical, LogOut, TrendingUp,
   Clock, CheckCircle, Construction, UserPlus, DollarSign, Calendar,
   ShieldCheck, Zap, BarChart3, ChevronRight, UserCog, Trash2, Edit3,
-  X, Eye, EyeOff, Mail, Lock, User as UserIcon
+  X, Eye, EyeOff, Mail, Lock, User as UserIcon, Columns3
 } from 'lucide-react';
 import DevisIAView from './DevisIAView';
 import DevisEditableView from './DevisEditableView';
@@ -13,6 +13,7 @@ import PendingDevisView from './PendingDevisView';
 import ClientsView from './ClientsView';
 import CaPrevisionnelleView from './CaPrevisionnelleView';
 import ObjectifsCommerciauxView from './ObjectifsCommerciauxView';
+import KanbanDevisView from './KanbanDevisView';
 import { devisAPI } from './api/devisAPI';
 
 // --- CONFIGURATION ---
@@ -58,6 +59,10 @@ const App = () => {
 
   // État pour les stats des devis signés (KPI Dashboard)
   const [devisSignesStats, setDevisSignesStats] = useState({ count: 0, totalHT: 0 });
+
+  // Clé de rafraîchissement pour forcer le rechargement des vues après mise à jour d'un devis
+  const [devisRefreshKey, setDevisRefreshKey] = useState(0);
+  const triggerDevisRefresh = () => setDevisRefreshKey(prev => prev + 1);
 
   const [factures, setFactures] = useState([
     { id: "FAC-2026-001", client: "Jean Durand", montant: 4500, date: "02/01/2026", statut: "Payée" },
@@ -899,6 +904,8 @@ const App = () => {
       generatedDevis={generatedDevis}
       setGeneratedDevis={setGeneratedDevis}
       handleGenerateIA={handleGenerateIA}
+      token={token}
+      onStatusChange={triggerDevisRefresh}
       onDevisSaved={async (devis) => {
         try {
           // Créer le devis dans la base de données
@@ -932,9 +939,11 @@ const App = () => {
         >
           ← Retour à la liste
         </button>
-        <DevisEditableView 
-          generatedDevis={selectedDevisForEditing} 
+        <DevisEditableView
+          generatedDevis={selectedDevisForEditing}
           setGeneratedDevis={setSelectedDevisForEditing}
+          token={token}
+          onStatusChange={triggerDevisRefresh}
           onDevisSaved={async (devis) => {
             try {
               // Mettre à jour le devis dans la base de données
@@ -1219,6 +1228,7 @@ const App = () => {
             { id: 'clients', label: 'Gestion des clients', icon: Users },
             { id: 'ca', label: "CA prévisionnelle", icon: BarChart3 },
             { id: 'objectifs', label: 'Objectifs Commerciaux', icon: TrendingUp },
+            { id: 'kanban', label: 'Pipeline Devis', icon: Columns3 },
             { id: 'ia-generator', label: 'Devis IA Manager', icon: Wand2 },
             { id: 'factures', label: 'Facturation', icon: Receipt },
             { id: 'chantiers', label: 'Suivi Chantiers', icon: Construction },
@@ -1258,6 +1268,7 @@ const App = () => {
             {currentPage === 'clients' && 'Base de données CRM'}
             {currentPage === 'ca' && 'CA prévisionnelle'}
             {currentPage === 'objectifs' && 'Objectifs Commerciaux'}
+            {currentPage === 'kanban' && 'Pipeline Devis'}
             {currentPage === 'ia-generator' && 'Intelligence Artificielle'}
             {currentPage === 'pending-devis' && 'Devis en attente'}
             {currentPage === 'editing-devis' && 'Modification Devis'}
@@ -1278,8 +1289,37 @@ const App = () => {
             {currentPage === 'dashboard' && <DashboardView />}
             {currentPage === 'clients' && <ClientsViewWrapper />}
             {currentPage === 'ia-generator' && <DevisIAViewWrapper />}
-            {currentPage === 'ca' && <CaPrevisionnelleView token={token} />}
-            {currentPage === 'objectifs' && <ObjectifsCommerciauxView token={token} />}
+            {currentPage === 'ca' && (
+              <CaPrevisionnelleView
+                token={token}
+                refreshKey={devisRefreshKey}
+                onEditDevis={(devis) => {
+                  setGeneratedDevis(devis);
+                  setCurrentPage('editing-devis');
+                }}
+              />
+            )}
+            {currentPage === 'objectifs' && (
+              <ObjectifsCommerciauxView
+                token={token}
+                refreshKey={devisRefreshKey}
+                onEditDevis={(devis) => {
+                  setGeneratedDevis(devis);
+                  setCurrentPage('editing-devis');
+                }}
+              />
+            )}
+            {currentPage === 'kanban' && (
+              <KanbanDevisView
+                token={token}
+                refreshKey={devisRefreshKey}
+                onStatusChange={triggerDevisRefresh}
+                onEditDevis={(devis) => {
+                  setGeneratedDevis(devis);
+                  setCurrentPage('editing-devis');
+                }}
+              />
+            )}
             {currentPage === 'editing-devis' && (
               <>
                 {!selectedDevisForEditing && (

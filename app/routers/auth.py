@@ -65,8 +65,9 @@ def login_for_access_token(
         from datetime import datetime
         max_age = int((expires_at - datetime.utcnow()).total_seconds())
     # En production, secure=True est obligatoire (HTTPS requis)
+    # En développement (localhost), secure=False pour que les cookies fonctionnent sur HTTP
     import os
-    is_secure = os.getenv('COOKIE_SECURE', 'true').lower() == 'true'
+    is_secure = os.getenv('COOKIE_SECURE', 'false').lower() == 'true'
     if response is not None:
         response.set_cookie(key="refresh_token", value=tokens["refresh_token"], httponly=True, secure=is_secure, samesite="lax", max_age=max_age, path="/")
     return {"access_token": tokens["access_token"], "token_type": "bearer"}

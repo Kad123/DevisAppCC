@@ -213,6 +213,27 @@ export const devisAPI = {
   },
 
   /**
+   * Mettre à jour le statut d'un devis
+   */
+  updateDevisStatut: async (devisId, newStatut, token) => {
+    const response = await fetch(`${API_URL}/devis/${devisId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ statut: newStatut })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Erreur lors de la mise à jour du statut');
+    }
+
+    return response.json();
+  },
+
+  /**
    * Supprimer un devis
    */
   deleteDevis: async (devisId, token) => {

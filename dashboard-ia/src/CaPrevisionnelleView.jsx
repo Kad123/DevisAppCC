@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { devisAPI } from './api/devisAPI';
 import { TrendingUp, FileCheck, Calendar, DollarSign } from 'lucide-react';
 
-const CaPrevisionnelleView = ({ token }) => {
+const CaPrevisionnelleView = ({ token, onEditDevis, refreshKey }) => {
   const [devisSigned, setDevisSigned] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -10,7 +10,7 @@ const CaPrevisionnelleView = ({ token }) => {
   useEffect(() => {
     if (!token) return;
     loadData();
-  }, [token]);
+  }, [token, refreshKey]);
 
   const loadData = async () => {
     setLoading(true);
@@ -128,8 +128,12 @@ const CaPrevisionnelleView = ({ token }) => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {devisSigned.map(d => (
-                <tr key={d.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-6 font-black text-slate-900">{d.nom}</td>
+                <tr
+                  key={d.id}
+                  onClick={() => onEditDevis?.(d)}
+                  className="hover:bg-blue-50 transition-colors cursor-pointer group"
+                >
+                  <td className="p-6 font-black text-slate-900 group-hover:text-blue-600">{d.nom}</td>
                   <td className="text-slate-600 font-medium">{d.client_name}</td>
                   <td className="text-slate-600 font-medium">{d.projet_name}</td>
                   <td className="text-slate-500 text-sm">
