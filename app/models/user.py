@@ -39,10 +39,42 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class UserUpdate(BaseModel):
+    """Schéma pour la mise à jour d'un utilisateur."""
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None
+
 class Token(BaseModel):
     """Schéma pour le jeton JWT."""
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str = "bearer"
+
+
+class RefreshTokenResponse(BaseModel):
+    token: str
+    expires_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey
+from datetime import datetime, timedelta
+from app.core.database import Base
+
+# --- Modèle de stockage des refresh tokens ---
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    token = Column(String, unique=True, index=True)
+    expires_at = Column(DateTime)
+    revoked = Column(Boolean, default=False)
 
 class TokenData(BaseModel):
     """Schéma pour le contenu décodé du jeton."""

@@ -1,10 +1,11 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import engine, Base 
 
 # --- IMPORTS DIRECTS DES MODÈLES ---
 # Ces imports permettent à SQLAlchemy de détecter vos tables automatiquement.
 # On importe chaque classe pour éviter les problèmes de dossiers vides (__init__.py).
-from app.models.user import User 
+from app.models.user import User, RefreshToken
 from app.models.crm import Client, Projet
 from app.models.devis import Devis, LotDevis, LignePoste, Facture
 from app.models.chantier import JalonChantier, JournalEntry, PointageHeures
@@ -25,6 +26,15 @@ app = FastAPI(
     title="API BTP - Management",
     description="Solution de gestion complète : CRM, Devis et Suivi de chantier.",
     version="1.0.0",
+)
+
+# Configuration CORS pour permettre les requêtes depuis le frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://localhost:5175", "http://127.0.0.1:5174", "http://127.0.0.1:5175"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Lancement de la création des tables

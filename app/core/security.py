@@ -7,7 +7,8 @@ from jose import jwt
 # Configuration JWT
 SECRET_KEY = os.getenv("SECRET_KEY", "CLE_SUPER_SECRETE_POUR_LE_DEVELOPPEMENT_12345")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Vérifie le mot de passe sans passer par passlib."""
@@ -31,6 +32,14 @@ def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_refresh_token(data: dict, expires_delta: Union[timedelta, None] = None) -> str:
+    """Génère un refresh token JWT avec une durée longue."""
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
+    to_encode.update({"exp": expire, "type": "refresh"})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def decode_access_token(token: str) -> Union[dict, None]:
