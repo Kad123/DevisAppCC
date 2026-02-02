@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import Toast from './Toast';
 import { devisAPI } from './api/devisAPI';
 import {
   FileText, Send, CheckCircle, XCircle, GripVertical,
@@ -13,6 +14,12 @@ const STATUTS = [
 ];
 
 const KanbanDevisView = ({ token, onEditDevis, refreshKey, onStatusChange }) => {
+  // Toast notification
+  const [toast, setToast] = useState({ message: '', type: 'error' });
+  const showToast = useCallback((message, type = 'error') => {
+    setToast({ message, type });
+  }, []);
+
   const [allDevis, setAllDevis] = useState([]);
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(null);
@@ -69,11 +76,17 @@ const KanbanDevisView = ({ token, onEditDevis, refreshKey, onStatusChange }) => 
       onStatusChange?.();
     } catch (err) {
       console.error('Erreur mise à jour statut:', err);
-      alert('Erreur lors du changement de statut');
+      showToast('Erreur lors du changement de statut', 'error');
     } finally {
       setUpdating(null);
       setDraggedDevis(null);
     }
+    {/* Toast global */}
+    <Toast
+      message={toast.message}
+      type={toast.type}
+      onClose={() => setToast({ ...toast, message: '' })}
+    />
   };
 
   const getColorClasses = (color) => {

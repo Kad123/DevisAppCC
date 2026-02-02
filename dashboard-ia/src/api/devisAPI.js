@@ -11,15 +11,13 @@ export const devisAPI = {
   createDevis: async (devisData, token) => {
     // S'assurer que projet_id est présent
     let devisDataToSend = { ...devisData };
-    
+
     // Si pas de projet_id, essayer de récupérer le premier projet ou en créer un
     if (!devisDataToSend.projet_id) {
       try {
         // Récupérer la liste des projets
-        const projetsResponse = await fetch(`${API_URL}/crm/projets/`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
+        const projetsResponse = await authFetch(`${API_URL}/crm/projets/`);
+
         if (projetsResponse.ok) {
           const projets = await projetsResponse.json();
           if (projets.length > 0) {
@@ -40,11 +38,10 @@ export const devisAPI = {
       }
     }
 
-    const response = await fetch(`${API_URL}/devis/`, {
+    const response = await authFetch(`${API_URL}/devis/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify(devisDataToSend)
     });
@@ -62,21 +59,18 @@ export const devisAPI = {
    */
   createDefaultProject: async (token) => {
     try {
-      const response = await fetch(`${API_URL}/crm/clients/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
+      const response = await authFetch(`${API_URL}/crm/clients/`);
+
       if (!response.ok) throw new Error('Impossible de récupérer les clients');
-      
+
       const clients = await response.json();
       const clientId = clients.length > 0 ? clients[0].id : 1;
-      
+
       // Créer un projet avec le premier client
-      const projectResponse = await fetch(`${API_URL}/crm/projets/`, {
+      const projectResponse = await authFetch(`${API_URL}/crm/projets/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           nom: `Projet - ${new Date().toLocaleDateString()}`,
@@ -85,9 +79,9 @@ export const devisAPI = {
           statut: 'En cours'
         })
       });
-      
+
       if (!projectResponse.ok) throw new Error('Impossible de créer le projet');
-      
+
       const project = await projectResponse.json();
       return project.id;
     } catch (err) {

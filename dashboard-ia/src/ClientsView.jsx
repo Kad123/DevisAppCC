@@ -1,7 +1,15 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useCallback } from 'react';
+import Toast from './Toast';
 import { Plus, MoreVertical, ArrowLeft, Edit3, Trash2, Mail, Phone, MapPin, Building2, User, Calendar } from 'lucide-react';
+import { authFetch } from './api/authAPI';
 
 const ClientsView = memo(({ clients = [], onRefresh, token }) => {
+  // Toast notification
+  const [toast, setToast] = useState({ message: '', type: 'error' });
+  const showToast = useCallback((message, type = 'error') => {
+    setToast({ message, type });
+  }, []);
+
   const [selectedClientId, setSelectedClientId] = useState(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [formData, setFormData] = useState({
@@ -58,12 +66,11 @@ const ClientsView = memo(({ clients = [], onRefresh, token }) => {
 
       const method = isCreatingNew ? 'POST' : 'PUT';
       const endpoint = isCreatingNew ? '/crm/clients/' : `/crm/clients/${selectedClientId}`;
-      
-      const response = await fetch(`http://localhost:8000${endpoint}`, {
+
+      const response = await authFetch(`http://localhost:8000${endpoint}`, {
         method,
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(apiData)
       });
@@ -79,19 +86,16 @@ const ClientsView = memo(({ clients = [], onRefresh, token }) => {
       onRefresh?.();
     } catch (err) {
       console.error('❌ Erreur:', err);
-      alert(`Erreur: ${err.message}`);
+      showToast(`Erreur: ${err.message}`, 'error');
     }
   };
 
   const handleDeleteClient = async (clientId) => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce client ?')) return;
-    
+
     try {
-      const response = await fetch(`http://localhost:8000/crm/clients/${clientId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const response = await authFetch(`http://localhost:8000/crm/clients/${clientId}`, {
+        method: 'DELETE'
       });
 
       if (!response.ok) {
@@ -102,8 +106,14 @@ const ClientsView = memo(({ clients = [], onRefresh, token }) => {
       onRefresh?.();
     } catch (err) {
       console.error('❌ Erreur:', err);
-      alert(`Erreur: ${err.message}`);
+      showToast(`Erreur: ${err.message}`, 'error');
     }
+    {/* Toast global */}
+    <Toast
+      message={toast.message}
+      type={toast.type}
+      onClose={() => setToast({ ...toast, message: '' })}
+    />
   };
 
   // === VUE FICHE CLIENT ===
@@ -365,9 +375,9 @@ const ClientsView = memo(({ clients = [], onRefresh, token }) => {
                   >
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all italic text-xs">
-                        {(c.nom_societe || c.nom_contact || 'C')?.substring(0, 2).toUpperCase()}
+                        {(c.nom_societe || c.nom_contact || c.nom || 'C')?.substring(0, 2).toUpperCase()}
                       </div>
-                      <span className="font-bold text-slate-700">{c.nom_societe || c.nom_contact}</span>
+                      <span className="font-bold text-slate-700">{c.nom_societe || c.nom_contact || c.nom}</span>
                     </div>
                   </td>
                   <td

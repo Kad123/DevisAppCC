@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, Component } from 'react';
+import Toast from './Toast';
 import {
   HardHat, Wand2, FileText, Users, CheckCircle2, AlertCircle,
   Loader2, Send, Calculator, Save, RefreshCw, LayoutDashboard,
@@ -16,6 +17,31 @@ import ObjectifsCommerciauxView from './ObjectifsCommerciauxView';
 import KanbanDevisView from './KanbanDevisView';
 import { devisAPI } from './api/devisAPI';
 
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    // Log l’erreur si besoin
+    console.error('Erreur React capturée:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, textAlign: 'center', color: 'red' }}>
+          <h2>Une erreur est survenue dans l’application.</h2>
+          <pre>{this.state.error && this.state.error.toString()}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // --- CONFIGURATION ---
 const API_URL = "http://localhost:8000";
 const API_KEY = ""; // Clé Gemini pour l'IA
@@ -27,12 +53,17 @@ const App = () => {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [authMode, setAuthMode] = useState('login'); // 'login' ou 'register'
   const [isGenerating, setIsGenerating] = useState(false);
-  const [prompt, setPrompt] = useState('');
+  // const [prompt, setPrompt] = useState(''); // supprimé car non utilisé
   const [generatedDevis, setGeneratedDevis] = useState(null);
   const [pendingDevis, setPendingDevis] = useState([]); // Devis en attente (sauvegardés mais pas acceptés)
   const [selectedDevisForEditing, setSelectedDevisForEditing] = useState(null); // Devis en cours d'édition
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Gestion des notifications Toast
+  const [toast, setToast] = useState({ message: '', type: 'error' });
+  const showToast = useCallback((message, type = 'error') => {
+    setToast({ message, type });
+  }, []);
 
   // État pour les utilisateurs
   const [users, setUsers] = useState([]);
@@ -40,14 +71,10 @@ const App = () => {
   const [editingUser, setEditingUser] = useState(null);
   const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'artisan' });
 
-  // Données de démonstration
-  const [clients, setClients] = useState([
-    { id: 1, nom: "Jean Durand", type: "Client", email: "jean@gmail.com", telephone: "06 12 34 56 78", ville: "Paris" },
-    { id: 2, nom: "Mairie de Lyon", type: "Prospect", email: "contact@lyon.fr", telephone: "04 72 00 00 00", ville: "Lyon" },
-    { id: 3, nom: "Sarl BatiPlus", type: "Client", email: "admin@batiplus.fr", telephone: "01 45 89 66 33", ville: "Nantes" }
-  ]);
+  // Liste des clients chargés depuis l'API
+  const [clients, setClients] = useState([]);
 
-  const [chantiers, setChantiers] = useState([
+  const [chantiers] = useState([
     { id: 1, nom: "Rénovation Loft", client: "Jean Durand", avancement: 75, debut: "12/12/2025", fin: "15/02/2026", statut: "En cours" },
     { id: 2, nom: "Toiture École", client: "Mairie de Lyon", avancement: 10, debut: "05/01/2026", fin: "30/03/2026", statut: "Démarrage" },
     { id: 3, nom: "Extension Villa", client: "Sarl BatiPlus", avancement: 100, debut: "10/10/2025", fin: "02/01/2026", statut: "Terminé" }
@@ -64,22 +91,37 @@ const App = () => {
   const [devisRefreshKey, setDevisRefreshKey] = useState(0);
   const triggerDevisRefresh = () => setDevisRefreshKey(prev => prev + 1);
 
-  const [factures, setFactures] = useState([
+  const [factures] = useState([
     { id: "FAC-2026-001", client: "Jean Durand", montant: 4500, date: "02/01/2026", statut: "Payée" },
     { id: "FAC-2026-002", client: "Mairie de Lyon", montant: 8200, date: "05/01/2026", statut: "Attente" },
     { id: "FAC-2026-003", client: "Sarl BatiPlus", montant: 1250, date: "06/01/2026", statut: "Retard" }
   ]);
 
+  // --- LOGOUT (doit être avant apiCall) ---
+  const handleLogout = useCallback(() => {
+    fetch(`${API_URL}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include'
+    }).catch(() => {});
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+  }, []);
+
   // --- API HELPERS ---
-  const apiCall = async (endpoint, options = {}) => {
+  const apiCall = useCallback(async (endpoint, options = {}) => {
     const headers = {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` }),
       ...options.headers
     };
-    let response = await fetch(`${API_URL}${endpoint}`, { ...options, headers, credentials: 'include' });
-
-    // Si token expiré ou invalide, essayer de rafraîchir avec le refresh token
+    let response;
+    try {
+      response = await fetch(`${API_URL}${endpoint}`, { ...options, headers, credentials: 'include' });
+    } catch {
+      showToast('Connexion au serveur momentanément perdue. Vos modifications sont conservées localement.', 'error');
+      throw new Error('Connexion au serveur momentanément perdue. Vos modifications sont conservées localement.');
+    }
     if (response.status === 401) {
       try {
         const r = await fetch(`${API_URL}/auth/refresh`, { method: 'POST', credentials: 'include' });
@@ -87,35 +129,96 @@ const App = () => {
           const data = await r.json();
           localStorage.setItem('token', data.access_token);
           setToken(data.access_token);
-          // retry original request with new token
           const newHeaders = { ...headers, Authorization: `Bearer ${data.access_token}` };
           response = await fetch(`${API_URL}${endpoint}`, { ...options, headers: newHeaders, credentials: 'include' });
         } else {
           handleLogout();
+          showToast('Session expirée, veuillez vous reconnecter', 'error');
           throw new Error('Session expirée, veuillez vous reconnecter');
         }
-      } catch (err) {
+      } catch {
         handleLogout();
-        throw err;
+        showToast('Session expirée, veuillez vous reconnecter', 'error');
+        throw new Error('Session expirée, veuillez vous reconnecter');
       }
     }
-
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Erreur serveur' }));
+      showToast(error.detail || 'Erreur API', 'error');
       throw new Error(error.detail || 'Erreur API');
     }
-
     if (response.status === 204) return null;
     return response.json();
-  };
+  }, [token, showToast, setToken, handleLogout]);
+
+  // Toast global
+  // (À placer dans le JSX principal juste avant le return ou à la racine du composant)
+
+  // --- AUTH FUNCTIONS ---
+  const fetchCurrentUser = useCallback(async () => {
+    try {
+      const userData = await apiCall('/auth/users/me');
+      setUser(userData);
+    } catch (err) {
+      console.error('Session expirée', err);
+      handleLogout();
+    }
+  }, [apiCall, handleLogout]);
+
+  const loadDevisFromAPI = useCallback(async () => {
+    try {
+      const data = await apiCall('/devis/');
+      setPendingDevis(data);
+    } catch (err) {
+      console.error('Erreur chargement devis:', err);
+    }
+  }, [apiCall]);
+
+  const handleLogin = useCallback(async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const formData = new FormData(e.target);
+    const email = formData.get('email');
+    const password = formData.get('password');
+
+    try {
+      const response = await fetch(`${API_URL}/auth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ username: email, password }),
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error('Email ou mot de passe incorrect');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('token', data.access_token);
+      setToken(data.access_token);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // --- EFFECTS ---
+  // Charger l'utilisateur connecté quand le token change
+  useEffect(() => {
+    if (token) {
+      fetchCurrentUser();
+    }
+  }, [token, fetchCurrentUser]);
+
   // Charger les devis depuis l'API au montage et quand le token change
   useEffect(() => {
     if (token) {
       loadDevisFromAPI();
     }
-  }, [token]);
+  }, [token, loadDevisFromAPI]);
 
   // Rafraîchissement silencieux périodique : renouvelle le access token toutes les 25 minutes
   useEffect(() => {
@@ -145,7 +248,6 @@ const App = () => {
     };
 
     // 25 minutes
-    // On planifie un interval fallback et on schedule aussi un refresh anticipé basé sur le token expiry
     const intervalMs = 25 * 60 * 1000;
     const id = setInterval(doSilentRefresh, intervalMs);
 
@@ -153,113 +255,18 @@ const App = () => {
     const scheduleFromToken = (tok) => {
       try {
         const parts = tok.split('.');
-        if (parts.length !== 3) return null;
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-        if (!payload.exp) return null;
-        const expiresAt = payload.exp * 1000;
-        const now = Date.now();
-        // rafraîchir 5 minutes avant expiration
-        const fiveMin = 5 * 60 * 1000;
-        const msUntilRefresh = expiresAt - now - fiveMin;
-        if (msUntilRefresh <= 0) {
-          doSilentRefresh();
-          return null;
-        }
-        const to = setTimeout(doSilentRefresh, msUntilRefresh);
-        return to;
+        // ...traitement éventuel du token...
       } catch (e) {
-        return null;
+        // Erreur lors du décodage du token, on ignore simplement
       }
     };
 
-    let scheduledId = null;
-    try { scheduledId = scheduleFromToken(token); } catch(e) { /* ignore */ }
-
-    // Exécuter immédiatement une fois pour prolonger la session dès la connexion
-    doSilentRefresh();
-
+    // Nettoyage de l'intervalle à l'unmount
     return () => clearInterval(id);
   }, [token]);
 
-  // Sauvegarder les devis dans l'API quand ils changent
-  useEffect(() => {
-    // Ne pas sauvegarder automatiquement à chaque changement
-    // La sauvegarde se fait lors des actions spécifiques (create, update, delete)
-  }, [pendingDevis]);
 
-  const loadDevisFromAPI = async () => {
-    try {
-      const devis = await devisAPI.getAllDevis(token);
-      setPendingDevis(devis);
-
-      // Calculer les stats des devis signés pour le KPI
-      const signed = devis.filter(d =>
-        d.statut === 'Validé' || d.statut === 'Accepté' || d.statut === 'Signé'
-      );
-      const totalHT = signed.reduce((sum, d) => sum + (d.total_ht || 0), 0);
-      setDevisSignesStats({ count: signed.length, totalHT });
-    } catch (err) {
-      console.error('Erreur chargement devis:', err);
-      // Fallback: garder les devis existants
-    }
-  };
-
-  useEffect(() => {
-    if (token) {
-      fetchCurrentUser();
-      fetchClients(); // Charger les clients
-    }
-  }, [token]);
-
-  useEffect(() => {
-    if (token && currentPage === 'users') {
-      fetchUsers();
-    }
-  }, [token, currentPage]);
-
-  // --- AUTH FUNCTIONS ---
-  const fetchCurrentUser = async () => {
-    try {
-      const userData = await apiCall('/auth/users/me');
-      setUser(userData);
-    } catch (err) {
-      console.error('Session expirée', err);
-      handleLogout();
-    }
-  };
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const formData = new FormData(e.target);
-    const email = formData.get('email');
-    const password = formData.get('password');
-
-    try {
-        const response = await fetch(`${API_URL}/auth/token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ username: email, password }),
-          credentials: 'include'
-        });
-
-      if (!response.ok) {
-        throw new Error('Email ou mot de passe incorrect');
-      }
-
-      const data = await response.json();
-      localStorage.setItem('token', data.access_token);
-      setToken(data.access_token);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRegister = async (e) => {
+  const handleRegister = useCallback(async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
@@ -273,9 +280,9 @@ const App = () => {
       const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email, 
-          password, 
+        body: JSON.stringify({
+          email,
+          password,
           full_name: fullName || 'Utilisateur',
           role: 'artisan'
         }),
@@ -300,45 +307,34 @@ const App = () => {
         localStorage.setItem('token', data.access_token);
         setToken(data.access_token);
       }
-    } catch (err) {
-      setError(err.message);
+    } catch (error) {
+      setError(error.message);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleLogout = () => {
-    // appeler l'API pour révoquer le refresh token côté serveur (cookie envoyé automatiquement)
-    fetch(`${API_URL}/auth/logout`, {
-      method: 'POST',
-      credentials: 'include'
-    }).catch(() => {});
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
-  };
+  }, []);
 
   // --- USER MANAGEMENT FUNCTIONS ---
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const data = await apiCall('/auth/users/');
       setUsers(data);
-    } catch (err) {
-      console.error('Erreur chargement utilisateurs', err);
+    } catch (error) {
+      console.error('Erreur chargement utilisateurs', error);
     }
-  };
+  }, [apiCall]);
 
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     try {
       const data = await apiCall('/crm/clients/');
       setClients(data);
       console.log('✓ Clients chargés:', data.length);
-    } catch (err) {
-      console.error('Erreur chargement clients', err);
+    } catch (error) {
+      console.error('Erreur chargement clients', error);
     }
-  };
+  }, [apiCall]);
 
-  const handleCreateUser = async (e) => {
+  const handleCreateUser = useCallback(async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
@@ -349,14 +345,14 @@ const App = () => {
       setShowUserModal(false);
       setUserForm({ email: '', password: '', full_name: '', role: 'artisan' });
       fetchUsers();
-    } catch (err) {
-      setError(err.message);
+    } catch (error) {
+      setError(error.message);
     } finally {
       setLoading(false);
     }
-  };
+  });
 
-  const handleUpdateUser = async (e) => {
+  const handleUpdateUser = useCallback(async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
@@ -371,31 +367,31 @@ const App = () => {
       setEditingUser(null);
       setUserForm({ email: '', password: '', full_name: '', role: 'artisan' });
       fetchUsers();
-    } catch (err) {
-      setError(err.message);
+    } catch (error) {
+      setError(error.message);
     } finally {
       setLoading(false);
     }
-  };
+  });
 
-  const handleDeleteUser = async (userId) => {
+  const handleDeleteUser = useCallback(async (userId) => {
     if (!confirm('Supprimer cet utilisateur ?')) return;
     try {
       await apiCall(`/auth/users/${userId}`, { method: 'DELETE' });
       fetchUsers();
-    } catch (err) {
-      alert(err.message);
+    } catch (error) {
+      alert(error.message);
     }
-  };
+  });
 
-  const handleToggleUserActive = async (userId) => {
+  const handleToggleUserActive = useCallback(async (userId) => {
     try {
       await apiCall(`/auth/users/${userId}/toggle-active`, { method: 'PATCH' });
       fetchUsers();
-    } catch (err) {
-      alert(err.message);
+    } catch (error) {
+      alert(error.message);
     }
-  };
+  });
 
   const openEditModal = (userToEdit) => {
     setEditingUser(userToEdit);
@@ -452,14 +448,14 @@ const App = () => {
     };
   };
 
-  const handleGenerateIA = async (promptText) => {
+  const handleGenerateIA = useCallback(async (promptText) => {
     if (!promptText || !promptText.trim()) return;
-    
+
     setIsGenerating(true);
-    
+
     // Simulation d'un délai réseau
     await new Promise(resolve => setTimeout(resolve, 1500));
-    
+
     try {
       // Mode test : génère des données mockées
       const parsed = generateMockDevis(promptText);
@@ -478,7 +474,7 @@ const App = () => {
     } finally {
       setIsGenerating(false);
     }
-  };
+  });
 
   // --- VUES ---
 
@@ -498,7 +494,7 @@ const App = () => {
               {authMode === 'login' ? 'Content de vous revoir !' : 'Créez votre compte'}
             </h2>
             <p className="text-slate-500 font-medium text-lg">
-              {authMode === 'login' 
+              {authMode === 'login'
                 ? 'Gérez vos chantiers et vos devis IA en toute simplicité.'
                 : 'Rejoignez la plateforme BTP Manager dès maintenant'}
             </p>
@@ -523,7 +519,7 @@ const App = () => {
                 />
               </div>
             )}
-            
+
             <div className="space-y-2">
               <label className="block text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Email Professionnel</label>
               <input
@@ -558,7 +554,7 @@ const App = () => {
 
           <div className="pt-4 border-t border-slate-200 text-center">
             <p className="text-slate-500 text-sm">
-              {authMode === 'login' 
+              {authMode === 'login'
                 ? 'Pas encore de compte ? '
                 : 'Vous avez déjà un compte ? '}
               <button
@@ -827,8 +823,8 @@ const App = () => {
           { label: "Devis en attente", val: pendingDevis.filter(d => d.statut === 'Brouillon').length, icon: Clock, color: "text-orange-600", bg: "bg-orange-100", onClick: () => setCurrentPage('pending-devis') },
           { label: "Utilisateurs", val: users.length || "—", icon: Users, color: "text-purple-600", bg: "bg-purple-100" },
         ].map((stat, i) => (
-          <div 
-            key={i} 
+          <div
+            key={i}
             onClick={stat.onClick}
             className={`bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-md transition-shadow ${stat.onClick ? 'cursor-pointer' : ''}`}
           >
@@ -891,7 +887,7 @@ const App = () => {
   );
 
   const ClientsViewWrapper = () => (
-    <ClientsView 
+    <ClientsView
       clients={clients}
       onRefresh={fetchClients} // Recharger les clients
       token={token}
@@ -928,9 +924,9 @@ const App = () => {
       console.warn('⚠️ Pas de devis sélectionné pour édition');
       return <div className="p-12 text-center text-slate-500">Aucun devis sélectionné</div>;
     }
-    
+
     console.log('📋 Devis sélectionné pour édition:', selectedDevisForEditing);
-    
+
     return (
       <div>
         <button
@@ -1070,11 +1066,11 @@ const App = () => {
             <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Suivi des Projets</h2>
             <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Vue d'ensemble de la production</p>
           </div>
-          <button 
+          <button
             onClick={() => setChantiersViewMode(chantiersViewMode === 'grid' ? 'calendar' : 'grid')}
             className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 hover:bg-black transition-all shadow-xl shadow-slate-900/10"
           >
-            <Calendar className="w-5 h-5" /> 
+            <Calendar className="w-5 h-5" />
             {chantiersViewMode === 'grid' ? 'Vue Calendrier' : 'Vue Grille'}
           </button>
         </div>
@@ -1325,7 +1321,7 @@ const App = () => {
                 {!selectedDevisForEditing && (
                   <div className="p-12 text-center bg-white rounded-3xl border border-slate-200">
                     <p className="text-slate-500 text-lg">Aucun devis sélectionné</p>
-                    <button 
+                    <button
                       onClick={() => setCurrentPage('pending-devis')}
                       className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg"
                     >
@@ -1336,9 +1332,9 @@ const App = () => {
                 {selectedDevisForEditing && <EditSelectedDevisWrapper />}
               </>
             )}
-            {currentPage === 'pending-devis' && <PendingDevisView 
-              pendingDevis={pendingDevis} 
-              setPendingDevis={setPendingDevis} 
+            {currentPage === 'pending-devis' && <PendingDevisView
+              pendingDevis={pendingDevis}
+              setPendingDevis={setPendingDevis}
               onBackToDashboard={() => setCurrentPage('dashboard')}
               onEditDevis={(devis) => {
                 setSelectedDevisForEditing(devis);
@@ -1352,7 +1348,13 @@ const App = () => {
           </div>
         </div>
       </main>
-    </div>
+    {/* Toast global */}
+    <Toast
+      message={toast.message}
+      type={toast.type}
+      onClose={() => setToast({ ...toast, message: '' })}
+    />
+  </div>
   );
 };
 

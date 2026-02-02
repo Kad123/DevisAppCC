@@ -1,8 +1,24 @@
-import React, { memo } from 'react';
-import { ArrowLeft, Eye, Trash2, FileText, DollarSign, Calendar } from 'lucide-react';
+import React, { memo, useState, useCallback } from 'react';
+import Toast from './Toast';
+import { ArrowLeft, Eye, Trash2, FileText, DollarSign, Calendar, RefreshCw } from 'lucide-react';
 import { devisAPI } from './api/devisAPI';
 
 const PendingDevisView = memo(({ pendingDevis, setPendingDevis, onBackToDashboard, onEditDevis, token }) => {
+  // Toast notification
+  const [toast, setToast] = useState({ message: '', type: 'error' });
+  const showToast = useCallback((message, type = 'error') => {
+    setToast({ message, type });
+  }, []);
+
+  const handleRelance = async (id) => {
+    try {
+      await devisAPI.sendReminder(id, token);
+      showToast('Relance envoyée avec succès', 'success');
+    } catch (err) {
+      showToast('Erreur lors de la relance : ' + (err?.message || err), 'error');
+    }
+  };
+
   const handleDeleteDevis = async (id) => {
     try {
       await devisAPI.deleteDevis(id, token);
@@ -10,7 +26,7 @@ const PendingDevisView = memo(({ pendingDevis, setPendingDevis, onBackToDashboar
       console.log('✓ Devis supprimé');
     } catch (err) {
       console.error('❌ Erreur suppression:', err);
-      alert(`Erreur lors de la suppression: ${err.message}`);
+      showToast(`Erreur lors de la suppression: ${err.message}`, 'error');
     }
   };
 
@@ -101,6 +117,12 @@ const PendingDevisView = memo(({ pendingDevis, setPendingDevis, onBackToDashboar
 
               {/* Boutons d'action */}
               <div className="bg-slate-50 p-6 flex gap-4 border-t border-slate-100">
+                                <button
+                                  onClick={() => handleRelance(devis.id)}
+                                  className="flex-1 px-6 py-3 bg-orange-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-orange-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                                >
+                                  <RefreshCw className="w-5 h-5" /> Relancer
+                                </button>
                 <button
                   onClick={() => onEditDevis(devis)}
                   className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
