@@ -517,6 +517,156 @@ npm run build
 
 ---
 
+## 🧩 Serveurs MCP installés
+
+### Configuration MCP (`~/.claude/mcp_settings.json`)
+
+```json
+{
+  "mcpServers": {
+    "shadcn": {
+      "transport": "http",
+      "url": "https://www.shadcn.io/api/mcp"
+    },
+    "tailkits": {
+      "transport": "http",
+      "url": "https://api.tailkits.com/mcp"
+    },
+    "flowbite": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@flowbite/mcp-server"]
+    },
+    "storybook": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@storybook/mcp-server"]
+    },
+    "figma-mcp": {
+      "transport": "http",
+      "url": "https://mcp.composio.dev/partner/composio/figma/mcp"
+    }
+  }
+}
+```
+
+### Bibliothèques UI disponibles
+
+| MCP Server | Type | Usage Principal | Stack Compatible |
+|------------|------|-----------------|------------------|
+| **shadcn/ui** | HTTP | Composants React headless + Tailwind | React + Tailwind ✅ |
+| **Tailkits** | HTTP | Templates et layouts Tailwind | Tailwind CSS ✅ |
+| **Flowbite** | stdio | Composants Tailwind avec interactions | React + Tailwind ✅ |
+| **Storybook** | stdio | Documentation et tests composants | React ✅ |
+| **Figma** | HTTP | Design-to-Code, extraction specs | Figma → React ✅ |
+
+### Quand utiliser chaque MCP
+
+#### shadcn/ui - Composants React primitifs
+```
+Formulaires (Input, Select, Textarea, Checkbox)
+Tables avec tri et pagination
+Dialogs et Modals
+Toasts et Notifications
+Datepickers et calendriers
+```
+
+**Exemples pour le projet BTP** :
+- Formulaire de création de devis
+- Table des factures avec tri
+- Modal de confirmation de suppression
+- Toast de succès après création
+
+#### Tailkits - Layouts et templates
+```
+Navigation (Navbar, Sidebar, Breadcrumbs)
+Layouts (Grid, Flex, Container)
+Pages complètes (Dashboard, Login, Settings)
+Sections (Hero, Features, Footer)
+```
+
+**Exemples pour le projet BTP** :
+- Navbar principale avec menu utilisateur
+- Sidebar de navigation (Devis, Clients, Factures)
+- Layout dashboard avec statistiques
+- Page de login responsive
+
+#### Flowbite - Composants interactifs
+```
+Dropdowns et Menus
+Tooltips et Popovers
+Accordions et Tabs
+Badges et Alerts
+Progress bars et Spinners
+```
+
+**Exemples pour le projet BTP** :
+- Dropdown actions sur les devis
+- Tabs pour vue liste/kanban des devis
+- Progress bar du statut de chantier
+- Badges de statut (Brouillon, Validé, Accepté)
+
+#### Storybook - Documentation composants
+```
+Générer stories automatiquement
+Documenter les props des composants
+Tester visuellement les états
+Créer un design system
+```
+
+**Exemples pour le projet BTP** :
+- Stories pour DevisEditableView
+- Documentation des variantes de SignaturePad
+- Tests visuels des états de KanbanDevisView
+
+#### Figma - Design-to-Code
+```
+Convertir designs Figma en React
+Extraire couleurs et typographie
+Générer composants pixel-perfect
+Synchroniser avec maquettes
+```
+
+**Exemples pour le projet BTP** :
+- Convertir maquette page Devis en React
+- Extraire le design system (couleurs, fonts)
+- Générer composants depuis Figma
+
+### Commandes pour demander des composants
+
+```bash
+# shadcn/ui
+"Ajoute un composant Table de shadcn pour afficher les devis avec tri par date"
+"Crée un formulaire shadcn pour ajouter un client avec validation"
+"Utilise le Dialog shadcn pour confirmer la suppression d'un devis"
+
+# Tailkits
+"Génère une sidebar tailkits avec navigation Devis/Clients/Factures"
+"Crée un layout dashboard tailkits avec header et statistiques"
+"Ajoute une navbar tailkits responsive avec menu utilisateur"
+
+# Flowbite
+"Ajoute un dropdown flowbite pour les actions sur chaque devis"
+"Crée des tabs flowbite pour alterner entre vue liste et kanban"
+"Utilise des badges flowbite pour les statuts de devis"
+
+# Storybook
+"Génère les stories pour le composant DevisEditableView"
+"Crée une story pour SignaturePad avec différents états"
+"Documente les props de KanbanDevisView dans Storybook"
+
+# Figma (quand maquettes disponibles)
+"Convertis la page Devis de Figma en composant React"
+"Extrais les couleurs du design system Figma"
+"Génère le composant Card Devis depuis la maquette Figma"
+```
+
+### Guide d'utilisation MCP
+
+📖 **Voir le fichier [MCP_GUIDE.md](./MCP_GUIDE.md) pour un guide complet d'utilisation des composants MCP**
+
+---
+
 ## 🎯 Priorités de Claude
 
 1. **TOUJOURS lire ce fichier au démarrage d'une session**
